@@ -1,0 +1,102 @@
+.Dd $Mdocdate$
+.Dt BROWSE 1
+.Os
+.Sh NAME
+.Nm browse
+.Nd an integrated directory browser for the shell
+.\"
+.Sh SYNPOSIS
+.Nm browse
+.\"
+.Sh DESCRIPTION
+.Nm browse
+is a simple terminal-based interface for browsing and selecting
+files and directories.
+These are its two only features; unlike its alternatives, it is not
+a file manager.
+
+When invoked,
+.Nm browse
+opens the current working directory, from which the user can browse
+other directories as well.
+
+.Nm browse
+can be exited in two ways:
+.Bl -enum
+.It
+The user cancels.
+The program returns 1.
+.It
+The user selects a file or directory, whose path is printed on the
+standard output.  The program returns 0.
+.El
+.\"
+.Sh EXAMPLES
+.Nm browse
+is designed to be used not as a standalone program, but as an
+extension to the shell, for the purpose of comfortably changing the
+current working directory or for providing arguments to a shell
+command.
+
+For example, the following POSIX function launches
+.Nm browse
+and switches to the selected directory:
+.Bd -literal -offset indent
+bg() {
+	dir=$(browse) && cd "$dir"
+}
+.Ed
+
+This function is included in the 
+.Ql browse.sh
+file.
+The mneumonic is
+.Dq browse & go (to) .
+In addition, the placement on a QWERTY keyboard of
+.Ql bg
+is analogous to that of
+.Ql cd .
+
+Shells that support in-place execution of commands via a key binding, like
+.Xr bash 1
+and
+.Xr mksh 1 ,
+can use
+.Nm browse
+to pick files and directories to be inserted as arguments to their
+shell commands.
+The following
+.Xr mksh 1
+command maps ^T for this purpose:
+.Bd -literal -offset indent
+bind -m ^G='^[ browse^[^E'
+.Ed
+
+Now, when the terminal user presses ^G,
+.Nm browse
+will be opened.
+When a selection has been made, its path will be inserted
+into the line that the user was typing before invoking
+.Nm browse .
+.\"
+.Sh KEY BINDINGS
+.Bl -tag -width 10n
+.It up, k
+Move to next file or directory
+.It down, j
+Move to previous file or directory
+.It left, h
+Browse parent directory
+.It right, l
+Browse directory under cursor
+.It return
+Select (exit with success)
+.It escape
+Cancel (exit with error)
+.El
+.\"
+.Sh AUTHORS
+.Nm browse
+is written by
+.An John Ankarström ,
+available {on the web|by e-mail} at john{.|@}ankarstrom.se.
