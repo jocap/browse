@@ -4,6 +4,7 @@ CFLAGS += -Wall -Wextra -pedantic -Wno-missing-braces
 CFLAGS += -Werror 
 
 browse: browse.c
+	cc $(CFLAGS) $(LDFLAGS) -o $@ $< term.c
 
 install: browse
 	cp browse ${PREFIX}/bin/browse

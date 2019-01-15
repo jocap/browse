@@ -7,6 +7,8 @@
 #include <dirent.h> /* opendir */
 #include <fcntl.h> /* open */
 
+#include "term.h"
+
 /**********************************************************************\
 |                                                                      |
 |  browse(1) is a terminal-based directory browser and selector.       |
@@ -28,8 +30,9 @@ bool option_all = false;
 
 /** terminal **/
 int ttyfd;
-size_t screen_rows = 20;
-size_t screen_rows_free = 4;
+int screen_rows;
+int screen_cols;
+size_t screen_rows_free;
 
 /** program **/
 char *program_name;
@@ -45,7 +48,7 @@ void die_usage() {
 
 void display(size_t count, struct dirent *entries[]) {
 	for (size_t i = 0; i < count; i++) {
-		printf("%s\n", entries[i]->d_name);
+		printf("%s\r\n", entries[i]->d_name);
 	}
 }
 
@@ -122,8 +125,12 @@ int main(int argc, char *argv[]) {
 		else die_usage();
 	}
 
+	if (get_window_size(&screen_rows, &screen_cols) == -1) err(1, "get_window_size");
+	enable_raw_mode();
+
 	char *selection = browse(".");
-	printf("%s\n", selection);
+
+	printf("%s\r\n", selection);
 	return 0;
 	/* assume that the kernel frees ttyfd */
 }
