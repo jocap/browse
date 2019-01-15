@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <err.h>
+#include <errno.h>
 #include <sys/types.h> /* DIR */
 #include <dirent.h> /* opendir */
 #include <fcntl.h> /* open */
@@ -63,27 +64,21 @@ int compare(const struct dirent **d1, const struct dirent **d2) {
 	return alphasort(d1, d2);
 }
 
-char *browse(const char *dirname) {
+void browse(const char *dirname) {
 	/* collect entries */
 	int count;
 	struct dirent **entries;
-	count = scandir(dirname, &entries, select, compare);
+	if ((count = scandir(dirname, &entries, select, compare)) == -1)
+		err(1, "scandir");
 
 	/* display entries */
 	display(count, entries);
 
-	/* return selection */
-	size_t size = strlen(entries[0]->d_name) + 1; /* placeholder */
-	char *selection = malloc(size);
-	strlcpy(selection, entries[0]->d_name, size);
-
-	/* free memory */
+	/* free entries */
 	for (int i = 0; i < count; i++) {
 		free(entries[i]);
 	}
 	free(entries);
-
-	return selection;
 }
 
 /*** command-line interface ***/
@@ -102,8 +97,7 @@ int main(int argc, char *argv[]) {
 	enable_raw_mode();
 
 	/* start browsing */
-	char *selection = browse(".");
-	printf("%s\r\n", selection);
+	browse(".");
 
 	return 0; /* assume that the kernel frees ttyfd */
 
