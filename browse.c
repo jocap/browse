@@ -46,53 +46,28 @@ void display(size_t count, struct dirent *entries[]) {
 
 /*** directory reading ***/
 
-void count_dir(DIR *stream, size_t *all, size_t *visible) {
-	*all = 0; /* including hidden */
-	*visible = 0; /* excluding hidden */
-
-	/* start from the top */
-	long location;
-	if ((location = telldir(stream)) == -1) err(1, "telldir");
-	rewinddir(stream);
-
-	/* go through and count entries */
-	struct dirent *entry;
-	while ((entry = readdir(stream)) != NULL) {
-		if (strncmp(entry->d_name, ".", 1) == 0) {
-			(*all)++;
-		} else {
-			(*all)++;
-			(*visible)++;
-		}
+int select(const struct dirent *entry) {
+	if (option_all) return true;
+	else {
+		if (strncmp(".", entry->d_name, 1) == 0) return false;
+		else return true;
 	}
+}
 
-	/* restore stream location */
-	seekdir(stream, location);
+int compare(const struct dirent **d1, const struct dirent **d2) {
+	/* sort directories first */
+	if ((*d1)->d_type == DT_DIR && (*d2)->d_type != DT_DIR) return -1;
+	if ((*d1)->d_type != DT_DIR && (*d2)->d_type == DT_DIR) return 1;
+
+	/* sort alphabetically */
+	return alphasort(d1, d2);
 }
 
 char *browse(const char *dirname) {
-	DIR *stream;
-	if ((stream = opendir(dirname)) == NULL) err(1, "opendir");
-
-	/* count entries */
-	size_t all;
-	size_t visible;
-	size_t count;
-
-	count_dir(stream, &all, &visible);
-	if (option_all) count = all;
-	else count = visible;
-
 	/* collect entries */
-	struct dirent *entries[count];
-	struct dirent *entry;
-	size_t i = 0;
-
-	while ((entry = readdir(stream)) != NULL) {
-		if (!option_all && strncmp(entry->d_name, ".", 1) == 0) continue;
-		entries[i] = entry;
-		i++;
-	}
+	int count;
+	struct dirent **entries;
+	count = scandir(dirname, &entries, select, compare);
 
 	/* display entries */
 	display(count, entries);
@@ -102,7 +77,11 @@ char *browse(const char *dirname) {
 	char *selection = malloc(size);
 	strlcpy(selection, entries[0]->d_name, size);
 
-	if (closedir(stream) == -1) err(1, "closedir");
+	/* free memory */
+	for (int i = 0; i < count; i++) {
+		free(entries[i]);
+	}
+	free(entries);
 
 	return selection;
 }
