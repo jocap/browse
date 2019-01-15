@@ -7,9 +7,14 @@
 #include <ctype.h> /* iscntrl(3) */
 #include <sys/ioctl.h> /* ioctl, winsize */
 
-struct termios original_termios;
+/**********************************************************************\
+|                                                                      |
+|  term.c is based on code from kilo by antirez:                       |
+|      github.com/antirez/kilo/                                        |
+|                                                                      |
+\**********************************************************************/
 
-/*** terminal ***/
+struct termios original_termios;
 
 void refresh_screen() {
 	write(STDOUT_FILENO, "\x1b[2J", 4); /* clear screen */
@@ -29,6 +34,29 @@ int get_window_size(int *rows, int *cols) {
 		*cols = ws.ws_col;
 		return 1;
 	}
+}
+
+int get_cursor_position(int ttyfd, int *rows, int *cols) {
+	/* ask n command for cursor position (6) */
+	if (write(ttyfd, "\x1b[6n", 4) != 4) return -1;
+
+	/* the response is in the format <esc>[24;80R */
+
+	/* read response */
+	char buf[32];
+	size_t i = 0;
+
+	while (i < sizeof(buf) - 1) {
+		if (read(STDIN_FILENO, &buf[i], 1) != 1) break;
+		if (buf[i] == 'R') break; /* read until R */
+		i++;
+	}
+
+	/* parse response */
+	if (buf[0] != '\x1b' || buf[1] != '[') return -1;
+	if (sscanf(&buf[2], "%d;%d", rows, cols) != 2) return -1;
+
+	return 0;
 }
 
 int disable_raw_mode() {
