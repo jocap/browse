@@ -6,6 +6,7 @@
 #include <sys/types.h> /* DIR */
 #include <dirent.h> /* opendir */
 #include <fcntl.h> /* open */
+#include <unistd.h> /* write */
 
 #include "term.h"
 
@@ -38,7 +39,8 @@ size_t screen_rows_free;
 
 void display(size_t count, struct dirent *entries[]) {
 	for (size_t i = 0; i < count; i++) {
-		printf("%s\r\n", entries[i]->d_name);
+		write(ttyfd, entries[i]->d_name, strlen(entries[i]->d_name));
+		write(ttyfd, "\r\n", 2);
 	}
 }
 
@@ -68,7 +70,7 @@ void count_dir(DIR *stream, size_t *all, size_t *visible) {
 	seekdir(stream, location);
 }
 
-char *browse(char *dirname) {
+char *browse(const char *dirname) {
 	DIR *stream;
 	if ((stream = opendir(dirname)) == NULL) err(1, "opendir");
 
