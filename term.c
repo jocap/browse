@@ -20,7 +20,7 @@ int get_window_size(int *rows, int *cols) {
 	struct winsize ws;
 
 	/* Terminal I/O Control Get WINdow SiZe */
-	int response = ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws);
+	int response = ioctl(STDIN_FILENO, TIOCGWINSZ, &ws);
 	if (response == -1 || ws.ws_col == 0) {
 		/* TODO: fallback if ioctl(2) fails */
 		return -1;
