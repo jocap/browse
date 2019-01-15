@@ -63,13 +63,19 @@ void set_window_info() {
 	first_row = row - cursor_dy;
 }
 
-/*** directory displaying and interacting ***/
+/* clear lines under first row */
+void clear_lines() {
+	move_cursor_to(ttyfd, first_row, 1);
+	write(ttyfd, "\x1b[J", 3);
+}
 
 /* move cursor to highlighted entry */
 void reset_cursor() {
 	int row = first_row + (int)highlighted_line;
 	move_cursor_to(ttyfd, row, 1);
 }
+
+/*** directory displaying and interacting ***/
 
 void process_key_press() {
 	char c = read_key();
@@ -166,7 +172,7 @@ int main(int argc, char *argv[]) {
 	act.sa_handler = set_window_info;
 	sigaction(SIGWINCH, &act, NULL);
 
-	/* TODO: delete all lines atexit(3) */
+	atexit(clear_lines);
 
 	/* start browsing */
 	browse(".");
