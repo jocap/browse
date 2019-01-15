@@ -4,6 +4,7 @@
 #include <string.h>
 #include <err.h>
 #include <errno.h>
+#include <signal.h>
 #include <sys/types.h> /* DIR */
 #include <dirent.h> /* opendir */
 #include <fcntl.h> /* open */
@@ -42,6 +43,11 @@ int screen_rows_left() {
 	if (get_cursor_position(ttyfd, &y, &x) == -1)
 		err(1, "get_cursor_position");
 	return screen_rows - y;
+}
+
+void set_window_size() {
+	if (get_window_size(&screen_rows, &screen_cols) == -1)
+		err(1, "get_window_size");
 }
 
 /*** directory displaying ***/
@@ -101,8 +107,13 @@ int main(int argc, char *argv[]) {
 	if ((ttyfd = open("/dev/tty", O_RDWR)) == -1) err(1, "open");
 
 	/* terminal handling */
-	if (get_window_size(&screen_rows, &screen_cols) == -1) err(1, "get_window_size");
+	set_window_size();
 	enable_raw_mode();
+
+	/* detect window size change */
+	struct sigaction act = {0};
+	act.sa_handler = set_window_size;
+	sigaction(SIGWINCH, &act, NULL);
 
 	/* start browsing */
 	browse(".");
