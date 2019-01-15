@@ -1,11 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <err.h>
+#include <errno.h>
+#include <limits.h> /* strtol(3) */
 #include <sys/ttydefaults.h> /* CTRL */
 #include <termios.h> /* line discipline (raw mode) */
 #include <unistd.h> /* read(2), write(2) */
 #include <ctype.h> /* iscntrl(3) */
-#include <sys/ioctl.h> /* ioctl, winsize */
+#include <sys/ioctl.h> /* ioctl(2), winsize */
 
 /**********************************************************************\
 |                                                                      |
@@ -19,6 +22,15 @@ struct termios original_termios;
 void refresh_screen() {
 	write(STDOUT_FILENO, "\x1b[2J", 4); /* clear screen */
 	write(STDOUT_FILENO, "\x1b[H", 3); /* move cursor to 1;1 */
+}
+
+void move_cursor_to(int ttyfd, int row, int col) {
+	char *seq;
+	if ((seq = malloc(10)) == NULL) err(1, "malloc");
+	if (snprintf(seq, 9, "\x1b[%d;%dH", row, col) < 0) err(1, "snprintf");
+	int len = strlen(seq);
+	write(ttyfd, seq, len); /* move cursor to 1;1 */
+	free(seq);
 }
 
 int get_window_size(int *rows, int *cols) {
@@ -36,7 +48,7 @@ int get_window_size(int *rows, int *cols) {
 	}
 }
 
-int get_cursor_position(int ttyfd, int *rows, int *cols) {
+int get_cursor_position(int ttyfd, int *row, int *col) {
 	/* ask n command for cursor position (6) */
 	if (write(ttyfd, "\x1b[6n", 4) != 4) return -1;
 
@@ -54,7 +66,7 @@ int get_cursor_position(int ttyfd, int *rows, int *cols) {
 
 	/* parse response */
 	if (buf[0] != '\x1b' || buf[1] != '[') return -1;
-	if (sscanf(&buf[2], "%d;%d", rows, cols) != 2) return -1;
+	if (sscanf(&buf[2], "%d;%d", row, col) != 2) return -1;
 
 	return 0;
 }
@@ -96,3 +108,12 @@ int enable_raw_mode() {
 	return 0;
 }
 
+char read_key() {
+	int n;
+	char c;
+	while ((n = read(STDIN_FILENO, &c, 1)) == -1) {
+		if (n == -1 && errno != EAGAIN) err(1, "read");
+		/* (EAGAIN = no data ready to be read) */
+	}
+	return c;
+}
