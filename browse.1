@@ -39,7 +39,7 @@ extension to the shell, for the purpose of comfortably changing the
 current working directory or for providing arguments to a shell
 command.
 
-For example, the following POSIX function launches
+For example, the following POSIX sh function launches
 .Nm browse
 and switches to the selected directory:
 .Bd -literal -offset indent
@@ -70,10 +70,10 @@ The following
 .Xr mksh 1
 command maps ^T for this purpose:
 .Bd -literal -offset indent
-bind -m ^G='^[ browse^[^E'
+bind -m ^T='^[ browse^[^E'
 .Ed
 
-Now, when the terminal user presses ^G,
+Now, when the terminal user presses ^T,
 .Nm browse
 will be opened.
 When a selection has been made, its path will be inserted
