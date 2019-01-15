@@ -47,7 +47,7 @@ void display(size_t count, struct dirent *entries[]) {
 
 /*** directory reading ***/
 
-int select(const struct dirent *entry) {
+int show_entry_p(const struct dirent *entry) {
 	if (option_all) return true;
 	else {
 		if (strncmp(".", entry->d_name, 1) == 0) return false;
@@ -55,7 +55,7 @@ int select(const struct dirent *entry) {
 	}
 }
 
-int compare(const struct dirent **d1, const struct dirent **d2) {
+int compare_entries(const struct dirent **d1, const struct dirent **d2) {
 	/* sort directories first */
 	if ((*d1)->d_type == DT_DIR && (*d2)->d_type != DT_DIR) return -1;
 	if ((*d1)->d_type != DT_DIR && (*d2)->d_type == DT_DIR) return 1;
@@ -68,7 +68,7 @@ void browse(const char *dirname) {
 	/* collect entries */
 	int count;
 	struct dirent **entries;
-	if ((count = scandir(dirname, &entries, select, compare)) == -1)
+	if ((count = scandir(dirname, &entries, show_entry_p, compare_entries)) == -1)
 		err(1, "scandir");
 
 	/* display entries */
