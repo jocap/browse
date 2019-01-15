@@ -45,13 +45,15 @@ void display(size_t count, struct dirent *entries[]) {
 /*** directory reading ***/
 
 void count_dir(DIR *stream, size_t *all, size_t *visible) {
-	*all = 0;
-	*visible = 0;
+	*all = 0; /* including hidden */
+	*visible = 0; /* excluding hidden */
 
+	/* start from the top */
 	long location;
 	if ((location = telldir(stream)) == -1) err(1, "telldir");
 	rewinddir(stream);
 
+	/* go through and count entries */
 	struct dirent *entry;
 	while ((entry = readdir(stream)) != NULL) {
 		if (strncmp(entry->d_name, ".", 1) == 0) {
@@ -62,20 +64,20 @@ void count_dir(DIR *stream, size_t *all, size_t *visible) {
 		}
 	}
 
-	seekdir(stream, location); /* reset */
+	/* restore stream location */
+	seekdir(stream, location);
 }
 
 char *browse(char *dirname) {
-	/* count entries */
 	DIR *stream;
+	if ((stream = opendir(dirname)) == NULL) err(1, "opendir");
+
+	/* count entries */
 	size_t all;
 	size_t visible;
 	size_t count;
 
-	if ((stream = opendir(dirname)) == NULL) err(1, "opendir");
-
 	count_dir(stream, &all, &visible);
-
 	if (option_all) count = all;
 	else count = visible;
 
@@ -106,22 +108,23 @@ char *browse(char *dirname) {
 /*** command-line interface ***/
 
 int main(int argc, char *argv[]) {
-	if ((ttyfd = open("/dev/tty", O_RDWR)) == -1) err(1, "open");
-
 	if (argc > 2) goto usage;
 	if (argc == 2) {
 		if (strcmp(argv[1], "-a") == 0) option_all = true;
 		else goto usage;
 	}
 
+	if ((ttyfd = open("/dev/tty", O_RDWR)) == -1) err(1, "open");
+
+	/* terminal handling */
 	if (get_window_size(&screen_rows, &screen_cols) == -1) err(1, "get_window_size");
 	enable_raw_mode();
 
+	/* start browsing */
 	char *selection = browse(".");
-
 	printf("%s\r\n", selection);
-	return 0;
-	/* assume that the kernel frees ttyfd */
+
+	return 0; /* assume that the kernel frees ttyfd */
 
 usage:
 	fprintf(stderr, "usage: %s [-a]\n", argv[0]);
