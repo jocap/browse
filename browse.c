@@ -35,28 +35,77 @@ bool option_all = false;
 int ttyfd;
 int screen_rows;
 int screen_cols;
+int first_row;
+int cursor_dy = 0; /* delta y (how many rows cursor has moved down) */
+
+/** directory interacting */
+size_t highlighted_line = 0;
+
+/*********************************************************************/
 
 /** terminal **/
 
+/* calculate number of rows from cursor to bottom of screen */
 int screen_rows_left() {
-	int y, x;
-	if (get_cursor_position(ttyfd, &y, &x) == -1)
+	int cursor_rows, cursor_cols;
+	if (get_cursor_position(ttyfd, &cursor_rows, &cursor_cols) == -1)
 		err(1, "get_cursor_position");
-	return screen_rows - y;
+	return screen_rows - cursor_rows;
 }
 
-void set_window_size() {
+void set_window_info() {
 	if (get_window_size(&screen_rows, &screen_cols) == -1)
 		err(1, "get_window_size");
+
+	int row, col;
+	if (get_cursor_position(ttyfd, &row, &col) == -1)
+		err(1, "get_cursor_position");
+	first_row = row - cursor_dy;
 }
 
-/*** directory displaying ***/
+/*** directory displaying and interacting ***/
 
-void display(size_t count, struct dirent *entries[]) {
-	for (size_t i = 0; i < count; i++) {
-		write(ttyfd, entries[i]->d_name, strlen(entries[i]->d_name));
-		write(ttyfd, "\r\n", 2);
+/* move cursor to highlighted entry */
+void reset_cursor() {
+	int row = first_row + (int)highlighted_line;
+	move_cursor_to(ttyfd, row, 1);
+}
+
+void process_key_press() {
+	char c = read_key();
+
+	switch (c) {
+	case CTRL('c'):
+		exit(0);
+		break;
 	}
+}
+
+void interact() {
+	for (;;) {
+		process_key_press();
+	}
+}
+
+void display(struct dirent *entries[], size_t from, size_t to) {
+	if (from > to) {
+		fprintf(stderr, "invalid range %zu-%zu", from, to);
+		exit(1);
+	}
+
+	struct dirent **subset = &entries[from];
+	size_t count = to - from;
+
+	for (size_t i = 0; i < count; i++) {
+		write(ttyfd, subset[i]->d_name, strlen(subset[i]->d_name));
+		if (i + 1 < count) {
+			write(ttyfd, "\r\n", 2);
+			cursor_dy++;
+		}
+	}
+	reset_cursor();
+
+	interact();
 }
 
 /*** directory reading ***/
@@ -79,17 +128,19 @@ int compare_entries(const struct dirent **d1, const struct dirent **d2) {
 }
 
 void browse(const char *dirname) {
-	/* collect entries */
+	/* collect and sort entries */
 	int count;
 	struct dirent **entries;
 	if ((count = scandir(dirname, &entries, show_entry_p, compare_entries)) == -1)
 		err(1, "scandir");
 
-	/* display entries */
-	display(count, entries);
+	/* display and interact with entries */
+	display(entries, 0, count - 1);
+}
 
+void leave(size_t count, struct dirent *entries[]) {
 	/* free entries */
-	for (int i = 0; i < count; i++) {
+	for (size_t i = 0; i < count; i++) {
 		free(entries[i]);
 	}
 	free(entries);
@@ -108,12 +159,14 @@ int main(int argc, char *argv[]) {
 
 	/* terminal handling */
 	enable_raw_mode();
-	set_window_size();
+	set_window_info();
 
 	/* detect window size change */
 	struct sigaction act = {0};
-	act.sa_handler = set_window_size;
+	act.sa_handler = set_window_info;
 	sigaction(SIGWINCH, &act, NULL);
+
+	/* TODO: delete all lines atexit(3) */
 
 	/* start browsing */
 	browse(".");
