@@ -34,7 +34,15 @@ bool option_all = false;
 int ttyfd;
 int screen_rows;
 int screen_cols;
-size_t screen_rows_free;
+
+/** terminal **/
+
+int screen_rows_left() {
+	int y, x;
+	if (get_cursor_position(ttyfd, &y, &x) == -1)
+		err(1, "get_cursor_position");
+	return screen_rows - y;
+}
 
 /*** directory displaying ***/
 
