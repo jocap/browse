@@ -34,16 +34,6 @@ int screen_rows;
 int screen_cols;
 size_t screen_rows_free;
 
-/** program **/
-char *program_name;
-
-/*** helper functions ***/
-
-void die_usage() {
-	fprintf(stderr, "usage: %s [-a]\n", program_name);
-	exit(1);
-}
-
 /*** directory displaying ***/
 
 void display(size_t count, struct dirent *entries[]) {
@@ -116,13 +106,12 @@ char *browse(char *dirname) {
 /*** command-line interface ***/
 
 int main(int argc, char *argv[]) {
-	program_name = argv[0];
 	if ((ttyfd = open("/dev/tty", O_RDWR)) == -1) err(1, "open");
 
-	if (argc > 2) die_usage();
+	if (argc > 2) goto usage;
 	if (argc == 2) {
 		if (strcmp(argv[1], "-a") == 0) option_all = true;
-		else die_usage();
+		else goto usage;
 	}
 
 	if (get_window_size(&screen_rows, &screen_cols) == -1) err(1, "get_window_size");
@@ -133,4 +122,8 @@ int main(int argc, char *argv[]) {
 	printf("%s\r\n", selection);
 	return 0;
 	/* assume that the kernel frees ttyfd */
+
+usage:
+	fprintf(stderr, "usage: %s [-a]\n", argv[0]);
+	return 1;
 }
