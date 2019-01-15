@@ -107,8 +107,8 @@ int main(int argc, char *argv[]) {
 	if ((ttyfd = open("/dev/tty", O_RDWR)) == -1) err(1, "open");
 
 	/* terminal handling */
-	set_window_size();
 	enable_raw_mode();
+	set_window_size();
 
 	/* detect window size change */
 	struct sigaction act = {0};
