@@ -5,6 +5,7 @@
 #include <err.h>
 #include <errno.h>
 #include <signal.h>
+#include <limits.h>
 #include <sys/types.h> /* DIR */
 #include <dirent.h> /* opendir */
 #include <fcntl.h> /* open */
@@ -33,58 +34,95 @@ bool option_all = false;
 
 /** terminal **/
 int ttyfd;
-int screen_rows;
-int screen_cols;
-int first_row;
-int cursor_dy = 0; /* delta y (how many rows cursor has moved down) */
 
-/** directory interacting */
-size_t highlighted_line = 0;
+/** ui **/
+struct screen {
+	int rows;
+	int cols;
+} Screen;
+
+struct ui {
+	size_t total_rows;
+	size_t starting_row;
+	size_t cursor_offset; /* how many rows is cursor from top row? */
+
+	char *top_text;
+	char *bottom_text;
+
+	struct dirent **entries;
+	size_t entries_count;
+	size_t entries_from;
+};
+const struct ui default_ui = { 20, 0, 0, "", "", NULL, 0, 0 };
+struct ui UI;
 
 /*********************************************************************/
 
-/** terminal **/
+/*** terminal ***/
 
 /* calculate number of rows from cursor to bottom of screen */
-int screen_rows_left() {
-	int cursor_rows, cursor_cols;
-	if (get_cursor_position(ttyfd, &cursor_rows, &cursor_cols) == -1)
-		err(1, "get_cursor_position");
-	return screen_rows - cursor_rows;
-}
-
 void set_window_info() {
-	if (get_window_size(&screen_rows, &screen_cols) == -1)
+	if (get_window_size(&Screen.rows, &Screen.cols) == -1)
 		err(1, "get_window_size");
 
 	int row, col;
 	if (get_cursor_position(ttyfd, &row, &col) == -1)
 		err(1, "get_cursor_position");
-	first_row = row - cursor_dy;
+	UI.starting_row = row - UI.cursor_offset;
 }
 
-/* clear lines under first row */
-void clear_lines() {
-	move_cursor_to(ttyfd, first_row, 1);
+/* clear rows under first row */
+void clear_rows() {
+	move_cursor_to(ttyfd, UI.starting_row, 1);
 	write(ttyfd, "\x1b[J", 3);
 }
 
-/* move cursor to highlighted entry */
-void reset_cursor() {
-	int row = first_row + (int)highlighted_line;
-	move_cursor_to(ttyfd, row, 1);
+/* make space to fit ui */
+void make_space() {
+	int row, col;
+	if (get_cursor_position(ttyfd, &row, &col) == -1)
+		err(1, "get_cursor_position");
+
+	for (size_t i = 0; i < UI.total_rows; i++) {
+		write(ttyfd, "\r\n", 2);
+	}
+
+	move_cursor_to(ttyfd, row + 2, 1);
 }
 
-/*** directory displaying and interacting ***/
+/*** interaction ***/
+
+int highlight_next() {
+	return 0;
+}
+int highlight_previous() {
+	return 0;
+}
 
 void process_key_press() {
 	char c = read_key();
 
 	switch (c) {
+	case 'q':
 	case CTRL('c'):
+	case CTRL('d'):
 		exit(0);
 		break;
+	case 'j':
+		highlight_next();
+		break;
+	case 'k':
+		highlight_previous();
+		break;
 	}
+}
+
+/*** ui ***/
+
+/* move cursor to highlighted entry */
+void reset_cursor() {
+	int row = UI.starting_row + UI.cursor_offset;
+	move_cursor_to(ttyfd, row, 1);
 }
 
 void interact() {
@@ -93,25 +131,24 @@ void interact() {
 	}
 }
 
-void display(struct dirent *entries[], size_t from, size_t to) {
-	if (from > to) {
-		fprintf(stderr, "invalid range %zu-%zu", from, to);
-		exit(1);
-	}
+void redraw() {
+	move_cursor_to(ttyfd, UI.starting_row, 1);
 
-	struct dirent **subset = &entries[from];
-	size_t count = to - from;
+	/* draw top row */
+	write(ttyfd, UI.top_text, strlen(UI.top_text));
+	write(ttyfd, "\r\n", 2);
 
-	for (size_t i = 0; i < count; i++) {
-		write(ttyfd, subset[i]->d_name, strlen(subset[i]->d_name));
-		if (i + 1 < count) {
+	/* draw entries */
+	size_t max_entries = UI.total_rows - 2;
+	if (max_entries > UI.entries_count) max_entries = UI.entries_count;
+	for (size_t i = UI.entries_from; i < max_entries; i++) {
+		write(ttyfd, UI.entries[i]->d_name, strlen(UI.entries[i]->d_name));
+		if (i + 1 < max_entries) {
 			write(ttyfd, "\r\n", 2);
-			cursor_dy++;
 		}
 	}
-	reset_cursor();
 
-	interact();
+	move_cursor_to(ttyfd, UI.starting_row, 1);
 }
 
 /*** directory reading ***/
@@ -140,8 +177,12 @@ void browse(const char *dirname) {
 	if ((count = scandir(dirname, &entries, show_entry_p, compare_entries)) == -1)
 		err(1, "scandir");
 
-	/* display and interact with entries */
-	display(entries, 0, count - 1);
+	UI.top_text = (char *)dirname;
+	UI.entries = entries;
+	UI.entries_count = count;
+	UI.entries_from = 0;
+	redraw();
+	interact();
 }
 
 void leave(size_t count, struct dirent *entries[]) {
@@ -161,21 +202,26 @@ int main(int argc, char *argv[]) {
 		else goto usage;
 	}
 
+	UI = default_ui;
+
 	if ((ttyfd = open("/dev/tty", O_RDWR)) == -1) err(1, "open");
 
 	/* terminal handling */
 	enable_raw_mode();
 	set_window_info();
+	make_space();
+
+	atexit(clear_rows);
 
 	/* detect window size change */
 	struct sigaction act = {0};
 	act.sa_handler = set_window_info;
 	sigaction(SIGWINCH, &act, NULL);
 
-	atexit(clear_lines);
-
 	/* start browsing */
-	browse(".");
+	char cwd[PATH_MAX];
+	if (getcwd(cwd, sizeof(cwd)) == NULL) err(1, "getcwd");
+	browse(cwd);
 
 	return 0; /* assume that the kernel frees ttyfd */
 
