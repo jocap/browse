@@ -3,14 +3,10 @@
 #include <stdbool.h>
 #include <string.h>
 #include <err.h>
-#include <errno.h>
-#include <signal.h>
-#include <sys/types.h> /* DIR */
-#include <dirent.h> /* opendir */
-#include <fcntl.h> /* open */
-#include <unistd.h> /* write */
-
-#include "term.h"
+#include <limits.h>
+#include <dirent.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 /**********************************************************************\
 |                                                                      |
@@ -31,88 +27,7 @@
 /** command-line options **/
 bool option_all = false;
 
-/** terminal **/
-int ttyfd;
-int screen_rows;
-int screen_cols;
-int first_row;
-int cursor_dy = 0; /* delta y (how many rows cursor has moved down) */
-
-/** directory interacting */
-size_t highlighted_line = 0;
-
 /*********************************************************************/
-
-/** terminal **/
-
-/* calculate number of rows from cursor to bottom of screen */
-int screen_rows_left() {
-	int cursor_rows, cursor_cols;
-	if (get_cursor_position(ttyfd, &cursor_rows, &cursor_cols) == -1)
-		err(1, "get_cursor_position");
-	return screen_rows - cursor_rows;
-}
-
-void set_window_info() {
-	if (get_window_size(&screen_rows, &screen_cols) == -1)
-		err(1, "get_window_size");
-
-	int row, col;
-	if (get_cursor_position(ttyfd, &row, &col) == -1)
-		err(1, "get_cursor_position");
-	first_row = row - cursor_dy;
-}
-
-/* clear lines under first row */
-void clear_lines() {
-	move_cursor_to(ttyfd, first_row, 1);
-	write(ttyfd, "\x1b[J", 3);
-}
-
-/* move cursor to highlighted entry */
-void reset_cursor() {
-	int row = first_row + (int)highlighted_line;
-	move_cursor_to(ttyfd, row, 1);
-}
-
-/*** directory displaying and interacting ***/
-
-void process_key_press() {
-	char c = read_key();
-
-	switch (c) {
-	case CTRL('c'):
-		exit(0);
-		break;
-	}
-}
-
-void interact() {
-	for (;;) {
-		process_key_press();
-	}
-}
-
-void display(struct dirent *entries[], size_t from, size_t to) {
-	if (from > to) {
-		fprintf(stderr, "invalid range %zu-%zu", from, to);
-		exit(1);
-	}
-
-	struct dirent **subset = &entries[from];
-	size_t count = to - from;
-
-	for (size_t i = 0; i < count; i++) {
-		write(ttyfd, subset[i]->d_name, strlen(subset[i]->d_name));
-		if (i + 1 < count) {
-			write(ttyfd, "\r\n", 2);
-			cursor_dy++;
-		}
-	}
-	reset_cursor();
-
-	interact();
-}
 
 /*** directory reading ***/
 
@@ -133,6 +48,14 @@ int compare_entries(const struct dirent **d1, const struct dirent **d2) {
 	return alphasort(d1, d2);
 }
 
+void leave(size_t count, struct dirent *entries[]) {
+	/* free entries */
+	for (size_t i = 0; i < count; i++) {
+		free(entries[i]);
+	}
+	free(entries);
+}
+
 void browse(const char *dirname) {
 	/* collect and sort entries */
 	int count;
@@ -140,16 +63,10 @@ void browse(const char *dirname) {
 	if ((count = scandir(dirname, &entries, show_entry_p, compare_entries)) == -1)
 		err(1, "scandir");
 
-	/* display and interact with entries */
-	display(entries, 0, count - 1);
-}
+	/* draw entries */
 
-void leave(size_t count, struct dirent *entries[]) {
-	/* free entries */
-	for (size_t i = 0; i < count; i++) {
-		free(entries[i]);
-	}
-	free(entries);
+	/* eventually */
+	leave(count, entries);
 }
 
 /*** command-line interface ***/
@@ -161,21 +78,10 @@ int main(int argc, char *argv[]) {
 		else goto usage;
 	}
 
-	if ((ttyfd = open("/dev/tty", O_RDWR)) == -1) err(1, "open");
-
-	/* terminal handling */
-	enable_raw_mode();
-	set_window_info();
-
-	/* detect window size change */
-	struct sigaction act = {0};
-	act.sa_handler = set_window_info;
-	sigaction(SIGWINCH, &act, NULL);
-
-	atexit(clear_lines);
-
 	/* start browsing */
-	browse(".");
+	char cwd[PATH_MAX];
+	if (getcwd(cwd, sizeof(cwd)) == NULL) err(1, "getcwd");
+	browse(cwd);
 
 	return 0; /* assume that the kernel frees ttyfd */
 

@@ -3,8 +3,8 @@ PREFIX = /usr/local
 CFLAGS += -Wall -Wextra -pedantic -Wno-missing-braces
 CFLAGS += -Werror 
 
-browse: browse.c term.c term.h
-	cc $(CFLAGS) $(LDFLAGS) -o $@ $< term.c
+browse: browse.c
+	cc $(CFLAGS) $(LDFLAGS) -o $@ $<
 
 install: browse
 	cp browse ${PREFIX}/bin/browse
